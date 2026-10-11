@@ -1105,76 +1105,184 @@ def sidebar_controls() -> tuple[str, Environment, float, int, str]:
         aqi=aqi_val, wind_speed=wind_val, wind_from=wdir_val,
         burn=burn_val / 100.0, source=source_lbl
     )
-
-    st.sidebar.markdown("---")
-    st.sidebar.markdown("### 🛠️ Developer & Cloud Audit")
-    show_aws_inspector = st.sidebar.checkbox(
-        "🛠️ AWS Architecture Inspector (For Judges)",
-        value=False,
-        help="Enable to reveal internal Amazon EventBridge cron rules, Lambda execution metrics, SNS alert payloads, and DynamoDB audit tables."
-    )
-
-    return portal_role, env, float(threshold), int(max_delay), lang_pref, show_aws_inspector
+    return portal_role, env, float(threshold), int(max_delay), lang_pref
 
 
 # =====================================================================================
 # TABS & STAKEHOLDER PORTAL VIEWS
 # =====================================================================================
 
-def tab_fleet(decisions: list, env: Environment, threshold: float, lang: str):
-    # Coordinator Executive Decision Bar
-    st.markdown("### 🚎 Fleet Transport Coordinator Action Bar")
-    c_btn1, c_btn2, c_btn3, c_btn4 = st.columns(4)
+def tab_fleet(decisions: list, env: Environment, threshold: float, lang: str, portal_role: str = ""):
+    # Contextual Stakeholder Quick Action Bar based on active portal role
+    if "Principal" in portal_role:
+        st.markdown("### 🎓 School Principal Quick Action Bar")
+        p_c1, p_c2, p_c3, p_c4 = st.columns(4)
+        with p_c1:
+            bell_buf = st.session_state.get("principal_bell_buffer_min", 0)
+            buf_opts = [0, 15, 30]
+            cur_idx = buf_opts.index(bell_buf) if bell_buf in buf_opts else 0
+            new_buf = st.selectbox(
+                "Assembly Bell Buffer:",
+                buf_opts,
+                index=cur_idx,
+                format_func=lambda x: "08:15 IST (Standard)" if x == 0 else f"+{x}m ({fmt_hm(8*60+15+x)} IST)",
+                key="quick_p_bell"
+            )
+            if new_buf != bell_buf:
+                st.session_state["principal_bell_buffer_min"] = new_buf
+                st.rerun()
+        with p_c2:
+            outdoor_susp = st.session_state.get("principal_outdoor_suspended", False)
+            o_lbl = "☀️ Re-open Grounds" if outdoor_susp else "🚫 Move Assembly Indoors"
+            if st.button(o_lbl, key="quick_p_out_btn"):
+                st.session_state["principal_outdoor_suspended"] = not outdoor_susp
+                st.rerun()
+        with p_c3:
+            hybrid_exempt = st.session_state.get("principal_hybrid_exempt", False)
+            h_lbl = "Deactivate Exemption" if hybrid_exempt else "🛡️ Remote Asthma Leniency"
+            if st.button(h_lbl, key="quick_p_hyb_btn"):
+                st.session_state["principal_hybrid_exempt"] = not hybrid_exempt
+                st.rerun()
+        with p_c4:
+            directive_txt = f"""OFFICIAL INSTITUTIONAL HEALTH DIRECTIVE
+DELHI NCR AFFILIATED SCHOOL CAMPUSES | OFFICE OF THE PRINCIPAL
+Date: {datetime.now().strftime('%d %B %Y')} | Time: {fmt_hm(env.now_min)} IST
+Airshed Severity: {env.aqi} AQI ({env.source})
+Assembly Bell: +{st.session_state.get('principal_bell_buffer_min', 0)} min buffer ({fmt_hm(8*60+15+st.session_state.get('principal_bell_buffer_min', 0))} IST)
+Assembly Protocol: {"Indoors in HEPA auditoriums" if st.session_state.get('principal_outdoor_suspended', False) else "Standard outdoor grounds"}
+High-Risk Leniency: {"Hybrid remote authorized for asthmatic students" if st.session_state.get('principal_hybrid_exempt', False) else "Standard physical attendance"}
+"""
+            st.download_button("📥 Export Signed Directive", data=directive_txt, file_name="principal_directive.txt", mime="text/plain", key="quick_p_dl_btn")
 
-    is_locked = st.session_state.get("fleet_plan_locked", False)
-    with c_btn1:
+        if st.session_state.get("principal_bell_buffer_min", 0) > 0:
+            st.info(f"💡 **Tardiness Protection Active**: +{st.session_state.get('principal_bell_buffer_min', 0)} min bell shift currently protects incoming students on delayed routes.")
+        if st.session_state.get("principal_outdoor_suspended", False):
+            st.warning("⚠️ **Campus Directive Enacted**: All outdoor morning assemblies, sports drills, and recess activities suspended.")
+        if st.session_state.get("principal_hybrid_exempt", False):
+            st.success("✅ **Medical Exemption Active**: 42 registered asthmatic students excused from physical transit.")
+
+    elif "Parent" in portal_role:
+        st.markdown("### 👨‍👩‍👧 Parent & Guardian Commute Action Bar")
+        students_quick = {
+            "Aarav Sharma": {"id": "STU-01", "grade": "Class 4-B", "route_id": "R-01", "stop": "Rohini Sector 14"},
+            "Diya Mehta": {"id": "STU-02", "grade": "Class 2-A", "route_id": "R-03", "stop": "Gurugram DLF Phase 3"},
+            "Kabir Verma": {"id": "STU-03", "grade": "Class 6-C", "route_id": "R-02", "stop": "Dwarka Sector 10"},
+            "Ananya Rao": {"id": "STU-04", "grade": "Class 8-A", "route_id": "R-04", "stop": "Noida Sector 62"},
+        }
+        g_c1, g_c2, g_c3, g_c4 = st.columns(4)
+        with g_c1:
+            sel_child = st.selectbox("Student Profile", list(students_quick.keys()), key="quick_g_child")
+            c_data = students_quick[sel_child]
+        with g_c2:
+            acks = st.session_state.setdefault("parent_acks", {})
+            if st.button(f"✅ Confirm Pickup ({c_data['id']})", key="quick_g_ack_btn"):
+                acks[c_data["id"]] = fmt_hm(env.now_min)
+                st.session_state["parent_acks"] = acks
+                st.rerun()
+        with g_c3:
+            masks = st.session_state.setdefault("parent_mask_req", {})
+            m_active = masks.get(c_data["id"], False)
+            if st.button("Cancel Mask" if m_active else "😷 Request In-Cabin N95", key="quick_g_mask_btn"):
+                masks[c_data["id"]] = not m_active
+                st.session_state["parent_mask_req"] = masks
+                st.rerun()
+        with g_c4:
+            absent = st.session_state.setdefault("parent_absent", {})
+            a_active = absent.get(c_data["id"], False)
+            if st.button("Revoke Leave" if a_active else "🏠 Excused Smog Absence", key="quick_g_abs_btn"):
+                absent[c_data["id"]] = not a_active
+                st.session_state["parent_absent"] = absent
+                st.rerun()
+
+        if acks.get(c_data["id"]):
+            st.success(f"✅ Pickup Confirmed for {sel_child} at {acks[c_data['id']]} IST.")
+        if masks.get(c_data["id"]):
+            st.info(f"😷 Pediatric N95 respirator requested for {sel_child}.")
+        if absent.get(c_data["id"]):
+            st.warning(f"⚠️ Excused smog absence recorded for {sel_child}. Bus conductor notified to bypass stop.")
+
+    elif "Regulator" in portal_role:
+        st.markdown("### 🏛️ City Environmental Regulator Action Bar")
+        r_c1, r_c2, r_c3, r_c4 = st.columns(4)
+        freight_div = st.session_state.get("regulator_freight_diversion", False)
+        certified = st.session_state.get("regulator_certified", False)
+        with r_c1:
+            f_txt = "Revoke Freight Ban" if freight_div else "🚨 Enact GRAP-IV Freight Diversion"
+            if st.button(f_txt, key="quick_r_f_btn"):
+                st.session_state["regulator_freight_diversion"] = not freight_div
+                st.rerun()
+        with r_c2:
+            if st.button("🏅 Issue CPCB Tier-1 ESG Seal", key="quick_r_cert_btn"):
+                st.session_state["regulator_certified"] = True
+                st.rerun()
+        with r_c3:
+            st.caption("Statutory authority under Section 115 Motor Vehicles Act & Air Act 1981.")
+        with r_c4:
+            audit_rows = [{"Corridor": d.route.id, "AQI": env.aqi, "Reduced_mg": round(d.route.students * (d.baseline.dose_ug - d.final.dose_ug) / 1000.0, 2)} for d in decisions]
+            st.download_button("📥 Export Airshed Audit", data=pd.DataFrame(audit_rows).to_csv(index=False).encode("utf-8"), file_name="cpcb_audit.csv", mime="text/csv", key="quick_r_dl_btn")
+
+        if freight_div:
+            st.success("✅ **GRAP Stage-IV Active**: Heavy diesel freight diverted from NH-44/48. School bus corridor congestion reduced by 18%.")
+        if certified:
+            st.info("🏅 **CPCB Clean Commute Accreditation Issued**: Fleet certified under National Ambient Air Quality standards.")
+
+    else:
+        # Coordinator Executive Decision Bar
+        st.markdown("### 🚎 Fleet Transport Coordinator Action Bar")
+        c_btn1, c_btn2, c_btn3, c_btn4 = st.columns(4)
+
+        is_locked = st.session_state.get("fleet_plan_locked", False)
+        with c_btn1:
+            if is_locked:
+                if st.button("🔓 Unlock Fleet Plan", key="fleet_c_unlock", help="Re-open mitigation plan for adjustments."):
+                    st.session_state["fleet_plan_locked"] = False
+                    st.rerun()
+            else:
+                if st.button("🔒 Authorize & Lock Plan", type="primary", key="fleet_c_lock", help="Lock today's departure holds and route diversions into active operations."):
+                    st.session_state["fleet_plan_locked"] = True
+                    st.rerun()
+
+        is_override = st.session_state.get("emergency_arterial_override", False)
+        with c_btn2:
+            ovr_lbl = "Bypass Arterial Override" if is_override else "🚨 Emergency Arterial Override"
+            if st.button(ovr_lbl, key="fleet_c_ovr", help="Force all buses back to standard arterial routes if interior roads are blocked."):
+                st.session_state["emergency_arterial_override"] = not is_override
+                st.rerun()
+
+        with c_btn3:
+            if st.button("📢 Broadcast Driver Manifest (SNS)", key="fleet_c_sns", help="Transmit real-time turn-by-turn schedules to all 6 school bus drivers and conductors."):
+                st.session_state["driver_broadcast_sent"] = True
+                st.rerun()
+
+        with c_btn4:
+            manifest_rows = []
+            for d in decisions:
+                manifest_rows.append({
+                    "Route ID": d.route.id, "Corridor": d.route.area,
+                    "Driver Assigned": f"Driver D-{d.route.id.split('-')[1]} (Depot North)",
+                    "Action": d.action, "Variant": d.final.variant,
+                    "Departs IST": fmt_hm(d.final.depart_min),
+                    "Arrives IST": fmt_hm(d.final.depart_min + d.final.trip_min),
+                    "Extra Diesel (L)": d.fuel_extra_l, "Cost (INR)": d.cost_extra_inr,
+                    "Bell Status": "Late" if d.bell_breached else "On-Time"
+                })
+            st.download_button(
+                "📋 Export Driver Manifest (CSV)",
+                data=pd.DataFrame(manifest_rows).to_csv(index=False).encode("utf-8"),
+                file_name="ecoroute_driver_manifest.csv",
+                mime="text/csv",
+                key="fleet_c_csv",
+                help="Download complete daily vehicle dispatch and driver instructions manifest."
+            )
+
         if is_locked:
-            if st.button("🔓 Unlock Fleet Plan", help="Re-open mitigation plan for adjustments."):
-                st.session_state["fleet_plan_locked"] = False
-                st.rerun()
-        else:
-            if st.button("🔒 Authorize & Lock Plan", type="primary", help="Lock today's departure holds and route diversions into active operations."):
-                st.session_state["fleet_plan_locked"] = True
-                st.rerun()
+            st.success("🔒 **Mitigation Plan Locked**: Morning departure holds and low-exposure loops approved. Live dispatch active.")
+        if is_override:
+            st.warning("⚠️ **Emergency Arterial Override Active**: Buses running nominal arterials. Low-exposure loops suspended.")
+        if st.session_state.get("driver_broadcast_sent"):
+            st.info("📢 **Amazon SNS Broadcast Delivered**: Push notifications and transactional SMS sent to 6/6 bus conductors and drivers.")
 
-    is_override = st.session_state.get("emergency_arterial_override", False)
-    with c_btn2:
-        ovr_lbl = "Bypass Arterial Override" if is_override else "🚨 Emergency Arterial Override"
-        if st.button(ovr_lbl, help="Force all buses back to standard arterial routes if interior roads are blocked."):
-            st.session_state["emergency_arterial_override"] = not is_override
-            st.rerun()
-
-    with c_btn3:
-        if st.button("📢 Broadcast Driver Manifest (SNS)", help="Transmit real-time turn-by-turn schedules to all 6 school bus drivers and conductors."):
-            st.session_state["driver_broadcast_sent"] = True
-            st.rerun()
-
-    with c_btn4:
-        manifest_rows = []
-        for d in decisions:
-            manifest_rows.append({
-                "Route ID": d.route.id, "Corridor": d.route.area,
-                "Driver Assigned": f"Driver D-{d.route.id.split('-')[1]} (Depot North)",
-                "Action": d.action, "Variant": d.final.variant,
-                "Departs IST": fmt_hm(d.final.depart_min),
-                "Arrives IST": fmt_hm(d.final.depart_min + d.final.trip_min),
-                "Extra Diesel (L)": d.fuel_extra_l, "Cost (INR)": d.cost_extra_inr,
-                "Bell Status": "Late" if d.bell_breached else "On-Time"
-            })
-        st.download_button(
-            "📋 Export Driver Manifest (CSV)",
-            data=pd.DataFrame(manifest_rows).to_csv(index=False).encode("utf-8"),
-            file_name="ecoroute_driver_manifest.csv",
-            mime="text/csv",
-            help="Download complete daily vehicle dispatch and driver instructions manifest."
-        )
-
-    if is_locked:
-        st.success("🔒 **Mitigation Plan Locked**: Morning departure holds and low-exposure loops approved. Live dispatch active.")
-    if is_override:
-        st.warning("⚠️ **Emergency Arterial Override Active**: Buses running nominal arterials. Low-exposure loops suspended.")
-    if st.session_state.get("driver_broadcast_sent"):
-        st.info("📢 **Amazon SNS Broadcast Delivered**: Push notifications and transactional SMS sent to 6/6 bus conductors and drivers.")
+    st.caption("💡 *Note: Complete dedicated decision suites for all 4 roles are clubbed into the **🎯 Stakeholder Decisions & Actions** tab.*")
 
     kpi_block(decisions)
     st.markdown("<div class='eco-grid'>" + "".join(route_card_html(d, threshold) for d in decisions) + "</div>", unsafe_allow_html=True)
@@ -1742,13 +1850,123 @@ def view_regulator(decisions: list, env: Environment, threshold: float):
     )
 
 
+
+# =====================================================================================
+# COORDINATOR DECISION SUITE & UNIFIED STAKEHOLDER TAB
+# =====================================================================================
+
+def view_coordinator_suite(decisions: list, env: Environment):
+    st.markdown(
+        "<div class='portal-scope-box'>"
+        "<h4>🚎 Fleet Transport Coordinator Authority Domain</h4>"
+        "<p><b>Exclusive Responsibilities:</b> Dynamic route dispatch approval, mechanical departure holds, emergency arterial overrides, driver telematics, and SMS/push broadcast transmissions.<br>"
+        "<i>Non-overlapping Boundary: Institutional school start bells, physical campus sports restrictions, and municipal freight bans belong strictly to the Principal and Environmental Regulator.</i></p>"
+        "</div>",
+        unsafe_allow_html=True
+    )
+
+    is_locked = st.session_state.get("fleet_plan_locked", False)
+    is_override = st.session_state.get("emergency_arterial_override", False)
+    broadcast_sent = st.session_state.get("driver_broadcast_sent", False)
+
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Active School Fleet", f"{len(decisions)} Buses", "6 Corridors")
+    c2.metric("Dispatch Plan Status", "🔒 Locked & Active" if is_locked else "🔓 Pending Authorization")
+    c3.metric("Emergency Route Override", "🚨 Arterial Forced" if is_override else "Adaptive Dynamic")
+    c4.metric("Driver Telemetry Broadcast", "Delivered (6/6)" if broadcast_sent else "Awaiting Push")
+
+    st.markdown("### 🚎 Central Depot Dispatch Action Suite")
+    col1, col2 = st.columns(2, gap="medium")
+    with col1:
+        with st.container(border=True):
+            st.markdown("#### 🔒 Decision 1: Authorize & Lock Daily Mitigation Plan")
+            st.markdown("Lock today's departure holds and route diversions into active operations. Freezes automated rescheduling until next weather cycle.")
+            if is_locked:
+                if st.button("🔓 Unlock Mitigation Plan", key="coord_suite_unlock"):
+                    st.session_state["fleet_plan_locked"] = False
+                    st.rerun()
+            else:
+                if st.button("🔒 Authorize & Lock Fleet Plan", type="primary", key="coord_suite_lock"):
+                    st.session_state["fleet_plan_locked"] = True
+                    st.rerun()
+            if is_locked:
+                st.success("🔒 **Plan Locked**: All 6 corridor drivers confirmed with locked departure windows.")
+            else:
+                st.info("ℹ️ Plan is currently in preview. Click above to freeze and authorize dispatch.")
+
+        with st.container(border=True):
+            st.markdown("#### 🚨 Decision 2: Emergency Arterial Override")
+            st.markdown("Force all buses back to standard arterial routes if interior sector roads face unexpected construction or obstacles.")
+            ovr_lbl = "Bypass Arterial Override (Resume Low-Exposure)" if is_override else "🚨 Enact Emergency Arterial Override"
+            if st.button(ovr_lbl, type="secondary" if is_override else "primary", key="coord_suite_ovr"):
+                st.session_state["emergency_arterial_override"] = not is_override
+                st.rerun()
+            if is_override:
+                st.warning("⚠️ **Arterial Override Active**: All low-exposure loops bypassed. Buses running on primary arterials.")
+
+    with col2:
+        with st.container(border=True):
+            st.markdown("#### 📢 Decision 3: Broadcast Driver Telemetry (Amazon SNS)")
+            st.markdown("Transmit real-time turn-by-turn schedules, departure hold windows, and corridor hazard maps to all 6 school bus drivers and conductors.")
+            if st.button("📢 Broadcast Driver Manifest via Amazon SNS", key="coord_suite_sns"):
+                st.session_state["driver_broadcast_sent"] = True
+                st.rerun()
+            if broadcast_sent:
+                st.success("📢 **Amazon SNS Broadcast Delivered**: Push notifications and transactional SMS sent to 6/6 bus conductors and drivers.")
+
+        with st.container(border=True):
+            st.markdown("#### 📋 Decision 4: Daily Dispatch Manifest (CSV)")
+            st.markdown("Download verified operational driver instructions manifest for depot physical records.")
+            manifest_rows = []
+            for d in decisions:
+                manifest_rows.append({
+                    "Route ID": d.route.id, "Corridor": d.route.area,
+                    "Driver Assigned": f"Driver D-{d.route.id.split('-')[1]} (Depot North)",
+                    "Action": d.action, "Variant": d.final.variant,
+                    "Departs IST": fmt_hm(d.final.depart_min),
+                    "Arrives IST": fmt_hm(d.final.depart_min + d.final.trip_min),
+                    "Extra Diesel (L)": d.fuel_extra_l, "Cost (INR)": d.cost_extra_inr,
+                    "Bell Status": "Late" if d.bell_breached else "On-Time"
+                })
+            m_df = pd.DataFrame(manifest_rows)
+            st.download_button(
+                "📋 Export Driver Manifest (CSV)",
+                data=m_df.to_csv(index=False).encode("utf-8"),
+                file_name="ecoroute_driver_manifest.csv",
+                mime="text/csv",
+                key="coord_suite_csv"
+            )
+
+
+def tab_stakeholders(decisions: list, env: Environment, threshold: float, lang: str, active_role: str):
+    st.markdown("### 🎯 Integrated Stakeholder Decisions & Actions")
+    st.caption("Cross-functional decision authority matrix: each role exercises distinct, non-overlapping statutory and operational powers.")
+
+    role_tabs = [
+        "🚎 Fleet Transport Coordinator",
+        "🎓 School Principal & Administration",
+        "👨‍👩‍👧 Parent & Guardian Commute Portal",
+        "🏛️ City Environmental Regulator (CPCB / DPCC)"
+    ]
+
+    st_t1, st_t2, st_t3, st_t4 = st.tabs(role_tabs)
+    with st_t1:
+        view_coordinator_suite(decisions, env)
+    with st_t2:
+        view_principal(decisions, env, threshold)
+    with st_t3:
+        view_parent(decisions, env, threshold, lang)
+    with st_t4:
+        view_regulator(decisions, env, threshold)
+
+
 # =====================================================================================
 # MAIN ENTRYPOINT
 # =====================================================================================
 
 def main():
     st.markdown(CSS, unsafe_allow_html=True)
-    portal_role, env, threshold, max_delay, lang_pref, show_aws_inspector = sidebar_controls()
+    portal_role, env, threshold, max_delay, lang_pref = sidebar_controls()
 
     # Session state initialization for cross-stakeholder governance
     st.session_state.setdefault("fleet_plan_locked", False)
@@ -1787,7 +2005,7 @@ def main():
 
     probe = probe_localstack()
     dot = "#2ecc8c" if probe["up"] else "#2bb6c9"
-    status = "AWS LocalStack Connected" if probe["up"] else ("AWS Architecture Showcase (Active)" if show_aws_inspector else "AWS Cloud Backend Active")
+    status = "AWS LocalStack Connected" if probe["up"] else "AWS Architecture Showcase (Active)"
 
     role_short = portal_role.split(" ")[1] if len(portal_role.split(" ")) > 1 else portal_role
 
@@ -1802,43 +2020,26 @@ def main():
         f"<span class='eco-pill'>Engine: <b>{fmt_hm(env.now_min)} IST</b></span>"
         "<span class='eco-pill'>Track 01: Air</span></div></div>", unsafe_allow_html=True)
 
-    # Route based on authenticated portal role:
-    # Retains operational dashboard as the primary view for School Transport Coordinator
-    if portal_role == "🚎 School Transport Coordinator (Fleet Operations)":
-        if show_aws_inspector:
-            tab1, tab2, tab3, tab4 = st.tabs([
-                "🗺️ Active Fleet Ops",
-                "🔬 Predictive AI Model Insights",
-                "📊 Validation & Sensitivity",
-                "🛡️ AWS Cloud Infrastructure Plumbing (Judge Inspector)"
-            ])
-            with tab1:
-                tab_fleet(decisions, env, threshold, lang_pref)
-            with tab2:
-                tab_ai(decisions, env, threshold)
-            with tab3:
-                tab_validation(decisions, env)
-            with tab4:
-                tab_aws(decisions, env, threshold, max_delay, compute_ms, sig, lang_pref)
-        else:
-            tab1, tab2, tab3 = st.tabs([
-                "🗺️ Active Fleet Ops",
-                "🔬 Predictive AI Model Insights",
-                "📊 Validation & Sensitivity"
-            ])
-            with tab1:
-                tab_fleet(decisions, env, threshold, lang_pref)
-            with tab2:
-                tab_ai(decisions, env, threshold)
-            with tab3:
-                tab_validation(decisions, env)
-    elif portal_role == "🎓 School Principal & Administration":
-        view_principal(decisions, env, threshold)
-    elif portal_role == "👨‍👩‍👧 Parent & Guardian Commute Portal":
-        view_parent(decisions, env, threshold, lang_pref)
-    elif portal_role == "🏛️ City Environmental Regulator (CPCB / DPCC)":
-        view_regulator(decisions, env, threshold)
+    # Unified 5-Tab Dashboard: Clubbed and permanently accessible for all users
+    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+        "🗺️ Active Fleet Ops",
+        "🎯 Stakeholder Decisions & Actions",
+        "🔬 Predictive AI Model Insights",
+        "📊 Validation & Sensitivity",
+        "🛡️ AWS Cloud Infrastructure Plumbing (Judge Inspector)"
+    ])
+    with tab1:
+        tab_fleet(decisions, env, threshold, lang_pref, portal_role)
+    with tab2:
+        tab_stakeholders(decisions, env, threshold, lang_pref, portal_role)
+    with tab3:
+        tab_ai(decisions, env, threshold)
+    with tab4:
+        tab_validation(decisions, env)
+    with tab5:
+        tab_aws(decisions, env, threshold, max_delay, compute_ms, sig, lang_pref)
 
 
 if __name__ == "__main__":
     main()
+
