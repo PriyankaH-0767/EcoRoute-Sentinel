@@ -33,7 +33,7 @@ LAYERS IN THIS FILE
 from __future__ import annotations
 
 import base64
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, time as dtime, timedelta, timezone
 import hashlib
 import html
@@ -906,6 +906,14 @@ CSS = """
 .parent-head{display:flex;justify-content:space-between;font-size:.8rem;opacity:.7;margin-bottom:12px}
 .parent-bubble{background:#233547;padding:14px;border-radius:14px;line-height:1.45;font-size:.92rem;border-left:4px solid #2ecc8c}
 .parent-time{font-size:.75rem;opacity:.6;margin-top:8px;text-align:right}
+.portal-scope-box{background:rgba(43,182,201,.08);border:1px solid rgba(43,182,201,.35);border-left:4px solid #2bb6c9;border-radius:12px;padding:14px 18px;margin-bottom:18px;font-family:'Figtree',system-ui,sans-serif}
+.portal-scope-box h4{margin:0 0 5px;color:#7de3f4;font-family:'Bricolage Grotesque',system-ui,sans-serif;font-size:1.05rem}
+.portal-scope-box p{margin:0;font-size:.90rem;line-height:1.45;color:#cfdee7}
+.decision-box{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.12);border-radius:14px;padding:16px 18px;margin-bottom:16px}
+.decision-box h4{margin:0 0 8px;font-family:'Bricolage Grotesque',system-ui,sans-serif;font-size:1.08rem;color:#f0f6fc}
+.cert-seal{border:2px dashed #2ecc8c;background:rgba(46,204,140,.06);border-radius:16px;padding:20px;text-align:center;margin:18px 0}
+.cert-seal h3{color:#2ecc8c;margin:0 0 6px;font-family:'Bricolage Grotesque',sans-serif}
+.coord-action-bar{background:rgba(15,48,41,.45);border:1px solid rgba(46,204,140,.3);border-radius:14px;padding:14px 18px;margin:8px 0 16px}
 </style>
 """
 
@@ -1025,7 +1033,30 @@ def kpi_block(decisions: list):
     )
 
 
-def sidebar_controls() -> tuple[Environment, float, int, str]:
+def sidebar_controls() -> tuple[str, Environment, float, int, str]:
+    st.sidebar.markdown("### 🔑 Stakeholder Portal Login")
+    portal_role = st.sidebar.selectbox(
+        "Active Stakeholder Portal",
+        [
+            "🚎 School Transport Coordinator (Fleet Operations)",
+            "🎓 School Principal & Administration",
+            "👨‍👩‍👧 Parent & Guardian Commute Portal",
+            "🏛️ City Environmental Regulator (CPCB / DPCC)",
+        ],
+        index=0,
+        help="Select role to access distinct non-overlapping authority controls and decision buttons."
+    )
+
+    if portal_role == "🚎 School Transport Coordinator (Fleet Operations)":
+        st.sidebar.caption("🟢 **Role Authenticated**: Head of Fleet Logistics (Central Depot). Authority over routing, driver schedules, fuel & telemetry.")
+    elif portal_role == "🎓 School Principal & Administration":
+        st.sidebar.caption("🎓 **Role Authenticated**: Dr. S. Ramanathan, Principal & Dean (Delhi NCR Campuses). Authority over bell schedules, sports, and campus health.")
+    elif portal_role == "👨‍👩‍👧 Parent & Guardian Commute Portal":
+        st.sidebar.caption("👨‍👩‍👧 **Role Authenticated**: Guardian Account (Student ID #DL-7492). Authority over child readiness, stop attendance & mask requests.")
+    else:
+        st.sidebar.caption("🏛️ **Role Authenticated**: Senior Inspector, Central Pollution Control Board (CPCB). Statutory authority under Air Act & MV Act Section 115.")
+
+    st.sidebar.markdown("---")
     st.sidebar.markdown("### 📡 Data Feed & Scenario")
     source_mode = st.sidebar.radio(
         "Data Feed Mode",
@@ -1075,14 +1106,68 @@ def sidebar_controls() -> tuple[Environment, float, int, str]:
         aqi=aqi_val, wind_speed=wind_val, wind_from=wdir_val,
         burn=burn_val / 100.0, source=source_lbl
     )
-    return env, float(threshold), int(max_delay), lang_pref
+    return portal_role, env, float(threshold), int(max_delay), lang_pref
 
 
 # =====================================================================================
-# TABS
+# TABS & STAKEHOLDER PORTAL VIEWS
 # =====================================================================================
 
 def tab_fleet(decisions: list, env: Environment, threshold: float, lang: str):
+    # Coordinator Executive Decision Bar
+    st.markdown("### 🚎 Fleet Transport Coordinator Action Bar")
+    c_btn1, c_btn2, c_btn3, c_btn4 = st.columns(4)
+
+    is_locked = st.session_state.get("fleet_plan_locked", False)
+    with c_btn1:
+        if is_locked:
+            if st.button("🔓 Unlock Fleet Plan", help="Re-open mitigation plan for adjustments."):
+                st.session_state["fleet_plan_locked"] = False
+                st.rerun()
+        else:
+            if st.button("🔒 Authorize & Lock Plan", type="primary", help="Lock today's departure holds and route diversions into active operations."):
+                st.session_state["fleet_plan_locked"] = True
+                st.rerun()
+
+    is_override = st.session_state.get("emergency_arterial_override", False)
+    with c_btn2:
+        ovr_lbl = "Bypass Arterial Override" if is_override else "🚨 Emergency Arterial Override"
+        if st.button(ovr_lbl, help="Force all buses back to standard arterial routes if interior roads are blocked."):
+            st.session_state["emergency_arterial_override"] = not is_override
+            st.rerun()
+
+    with c_btn3:
+        if st.button("📢 Broadcast Driver Manifest (SNS)", help="Transmit real-time turn-by-turn schedules to all 6 school bus drivers and conductors."):
+            st.session_state["driver_broadcast_sent"] = True
+            st.rerun()
+
+    with c_btn4:
+        manifest_rows = []
+        for d in decisions:
+            manifest_rows.append({
+                "Route ID": d.route.id, "Corridor": d.route.area,
+                "Driver Assigned": f"Driver D-{d.route.id.split('-')[1]} (Depot North)",
+                "Action": d.action, "Variant": d.final.variant,
+                "Departs IST": fmt_hm(d.final.depart_min),
+                "Arrives IST": fmt_hm(d.final.depart_min + d.final.trip_min),
+                "Extra Diesel (L)": d.fuel_extra_l, "Cost (INR)": d.cost_extra_inr,
+                "Bell Status": "Late" if d.bell_breached else "On-Time"
+            })
+        st.download_button(
+            "📋 Export Driver Manifest (CSV)",
+            data=pd.DataFrame(manifest_rows).to_csv(index=False).encode("utf-8"),
+            file_name="ecoroute_driver_manifest.csv",
+            mime="text/csv",
+            help="Download complete daily vehicle dispatch and driver instructions manifest."
+        )
+
+    if is_locked:
+        st.success("🔒 **Mitigation Plan Locked**: Morning departure holds and low-exposure loops approved. Live dispatch active.")
+    if is_override:
+        st.warning("⚠️ **Emergency Arterial Override Active**: Buses running nominal arterials. Low-exposure loops suspended.")
+    if st.session_state.get("driver_broadcast_sent"):
+        st.info("📢 **Amazon SNS Broadcast Delivered**: Push notifications and transactional SMS sent to 6/6 bus conductors and drivers.")
+
     kpi_block(decisions)
     st.markdown("<div class='eco-grid'>" + "".join(route_card_html(d, threshold) for d in decisions) + "</div>", unsafe_allow_html=True)
 
@@ -1330,21 +1415,373 @@ def tab_aws(decisions: list, env: Environment, threshold: float, max_delay: int,
 
 
 # =====================================================================================
+# STAKEHOLDER PORTAL VIEWS: PRINCIPAL, PARENT & REGULATOR
+# =====================================================================================
+
+def view_principal(decisions: list, env: Environment, threshold: float):
+    st.markdown(
+        "<div class='portal-scope-box'>"
+        "<h4>🎓 School Principal & Administration Authority Domain</h4>"
+        "<p><b>Exclusive Responsibilities:</b> Institutional morning assembly location, campus sports/PE safety policies, morning bell flexibility, and medical attendance leniency for vulnerable students.<br>"
+        "<i>Non-overlapping Boundary: Bus routing, diesel budgets, driver telematics, and mechanical vehicle dispatch are strictly delegated to the Transport Coordinator.</i></p>"
+        "</div>",
+        unsafe_allow_html=True
+    )
+
+    bell_buf = st.session_state.get("principal_bell_buffer_min", 0)
+    ontime_count = sum(1 for d in decisions if not d.bell_breached)
+    outdoor_susp = st.session_state.get("principal_outdoor_suspended", False)
+    hybrid_exempt = st.session_state.get("principal_hybrid_exempt", False)
+
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Campus Air Hazard", f"{env.aqi} AQI", "Severe Inversion" if env.aqi > 300 else "Moderate", delta_color="inverse")
+    c2.metric("Morning Assembly Bell", f"+{bell_buf}m Buffer", "Standard 08:15 IST" if bell_buf == 0 else f"Shifted to {fmt_hm(8*60+15+bell_buf)} IST")
+    c3.metric("Morning Assembly Protocol", "Indoors (Auditorium)" if outdoor_susp else "Outdoor Grounds")
+    c4.metric("Fleet Arrival Compliance", f"{ontime_count} / {len(decisions)} Buses", f"{ontime_count/len(decisions)*100:.0f}% On-Time")
+
+    st.markdown("### 🏛️ Executive School Safety Decision Suite")
+    p_col1, p_col2 = st.columns(2, gap="medium")
+
+    with p_col1:
+        st.markdown("<div class='decision-box'><h4>⏰ Decision 1: Morning Assembly Bell Time Shift</h4>"
+                    "<p style='font-size:0.88rem;color:#a9c7bc'>Adjust morning assembly time buffer to allow buses delayed by stubble smog to arrive without students missing classes or incurring tardiness penalties.</p>", unsafe_allow_html=True)
+        buf_options = [0, 15, 30]
+        cur_idx = buf_options.index(bell_buf) if bell_buf in buf_options else 0
+        new_buf = st.radio(
+            "Assembly Bell Delay Buffer (Minutes):",
+            buf_options,
+            index=cur_idx,
+            format_func=lambda x: "No Buffer (08:15 IST Bell)" if x == 0 else f"+{x} min Buffer ({fmt_hm(8*60+15+x)} IST Bell)",
+            horizontal=True,
+            key="p_bell_radio"
+        )
+        if st.button("💾 Apply Bell Adjustment to All Corridors", type="primary", key="p_bell_btn"):
+            st.session_state["principal_bell_buffer_min"] = new_buf
+            st.success(f"✅ Morning bell buffer adjusted to +{new_buf} min. Updated fleet arrival calculations across all 6 corridors.")
+            st.rerun()
+        if bell_buf > 0:
+            st.info(f"💡 **Tardiness Protection Active**: +{bell_buf} min bell shift currently protects incoming students on delayed routes ({ontime_count}/{len(decisions)} buses arriving on schedule).")
+        st.markdown("</div>", unsafe_allow_html=True)
+
+        st.markdown("<div class='decision-box'><h4>🏫 Decision 2: High-Risk Respiratory Medical Leniency</h4>"
+                    "<p style='font-size:0.88rem;color:#a9c7bc'>Authorize remote hybrid classroom access for students with pediatric asthma or acute bronchitis during severe smoke inversion days.</p>", unsafe_allow_html=True)
+        h_btn_lbl = "Deactivate Remote Exemption" if hybrid_exempt else "Authorize Remote Hybrid Study (42 Asthmatic Students)"
+        if st.button("🛡️ " + h_btn_lbl, key="p_hybrid_btn"):
+            st.session_state["principal_hybrid_exempt"] = not hybrid_exempt
+            st.rerun()
+        if hybrid_exempt:
+            st.success("✅ **Medical Exemption Active**: 42 registered asthmatic students across Rohini, Gurugram, and Dwarka campuses excused from transit attendance without academic penalty.")
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    with p_col2:
+        st.markdown("<div class='decision-box'><h4>🚫 Decision 3: Campus Smog Directive (Assembly & Sports)</h4>"
+                    "<p style='font-size:0.88rem;color:#a9c7bc'>Mandate morning prayer and physical education activities move indoors into HEPA-filtered campus auditoriums.</p>", unsafe_allow_html=True)
+        o_btn_lbl = "Re-open Outdoor Grounds" if outdoor_susp else "Suspend Outdoor Assembly & Physical Sports"
+        if st.button("📢 " + o_btn_lbl, key="p_outdoor_btn"):
+            st.session_state["principal_outdoor_suspended"] = not outdoor_susp
+            st.rerun()
+        if outdoor_susp:
+            st.warning("⚠️ **Campus Directive Enacted**: All outdoor morning assemblies, sports drills, and recess activities suspended. Students confined to HEPA-purified indoor auditoriums.")
+        st.markdown("</div>", unsafe_allow_html=True)
+
+        st.markdown("<div class='decision-box'><h4>📄 Decision 4: Official Principal Directive Notice</h4>"
+                    "<p style='font-size:0.88rem;color:#a9c7bc'>Generate and sign institutional health advisory for distribution to parents, teachers, and transport conductors.</p>", unsafe_allow_html=True)
+        directive_text = f"""OFFICIAL INSTITUTIONAL HEALTH DIRECTIVE
+DELHI NCR AFFILIATED SCHOOL CAMPUSES | OFFICE OF THE PRINCIPAL
+Date: {datetime.now().strftime('%d %B %Y')} | Time: {fmt_hm(env.now_min)} IST
+Airshed Severity: {env.aqi} AQI ({env.source})
+
+1. MORNING BELL SCHEDULE:
+   Assembly bell adjusted by +{bell_buf} minutes. Official school opening bell set at {fmt_hm(8*60+15+bell_buf)} IST.
+   No student arriving on delayed school transport will be marked late.
+
+2. CAMPUS ASSEMBLY & PHYSICAL EDUCATION:
+   {"OUTDOOR ACTIVITIES SUSPENDED. All prayers and physical drills moved indoors to air-purified auditoriums." if outdoor_susp else "Standard outdoor campus protocol active."}
+
+3. RESPIRATORY HEALTH EXEMPTION:
+   {"Remote hybrid study authorized for 42 registered high-risk asthmatic students." if hybrid_exempt else "Standard physical attendance required."}
+
+Signed:
+Dr. S. Ramanathan, Principal & Dean
+Digital Verification Hash: {hashlib.sha256(f"{env.aqi}-{bell_buf}-{outdoor_susp}".encode()).hexdigest()[:16].upper()}
+"""
+        st.download_button(
+            "📥 Export Signed Principal Directive (TXT)",
+            data=directive_text,
+            file_name=f"principal_smog_directive_{datetime.now().strftime('%Y%m%d')}.txt",
+            mime="text/plain",
+            key="p_download_btn"
+        )
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    st.markdown("### 📋 Morning Influx Roster & Corridor Bell Tracking")
+    roster_rows = []
+    for d in decisions:
+        arr_min = d.final.depart_min + d.final.trip_min
+        bell_time = d.route.bell_time_min
+        roster_rows.append({
+            "Route ID": d.route.id,
+            "Campus Sector": d.route.area,
+            "Students En Route": d.route.students,
+            "Departure IST": fmt_hm(d.final.depart_min),
+            "Estimated Arrival": fmt_hm(arr_min),
+            "Assembly Bell": fmt_hm(bell_time),
+            "Arrival Status": "✅ On-Time" if not d.bell_breached else f"⚠️ Late by {d.bell_margin_min:.0f}m",
+            "Mitigation Strategy": plan_text(d)
+        })
+    show_df(pd.DataFrame(roster_rows), hide_index=True)
+
+
+def view_parent(decisions: list, env: Environment, threshold: float, lang: str):
+    st.markdown(
+        "<div class='portal-scope-box'>"
+        "<h4>👨‍👩‍👧 Parent & Guardian Commute Safety Domain</h4>"
+        "<p><b>Exclusive Responsibilities:</b> Monitoring child's specific bus route, confirming morning pickup readiness, requesting in-cabin protective masks, and exercising excused smog absence.<br>"
+        "<i>Non-overlapping Boundary: Parents do not alter bus route geometry, school bell schedules, or municipal road closures.</i></p>"
+        "</div>",
+        unsafe_allow_html=True
+    )
+
+    students_db = {
+        "Aarav Sharma": {"id": "STU-01", "grade": "Class 4-B", "route_id": "R-01", "stop": "Rohini Sector 14", "time_off": 0, "stop_pm": 340},
+        "Diya Mehta": {"id": "STU-02", "grade": "Class 2-A", "route_id": "R-03", "stop": "Gurugram DLF Phase 3", "time_off": 10, "stop_pm": 410},
+        "Kabir Verma": {"id": "STU-03", "grade": "Class 6-C", "route_id": "R-02", "stop": "Dwarka Sector 10", "time_off": 5, "stop_pm": 260},
+        "Ananya Rao": {"id": "STU-04", "grade": "Class 8-A", "route_id": "R-04", "stop": "Noida Sector 62", "time_off": 15, "stop_pm": 180},
+    }
+
+    st.markdown("### 👧 Select Student Profile")
+    child_name = st.selectbox(
+        "Active Student Commute Profile:",
+        list(students_db.keys()),
+        format_func=lambda k: f"{k} ({students_db[k]['grade']}) — Route {students_db[k]['route_id']} ({students_db[k]['stop']})"
+    )
+    c_info = students_db[child_name]
+    d = next((x for x in decisions if x.route.id == c_info["route_id"]), decisions[0])
+
+    acks = st.session_state.setdefault("parent_acks", {})
+    absent = st.session_state.setdefault("parent_absent", {})
+    masks = st.session_state.setdefault("parent_mask_req", {})
+
+    is_acked = acks.get(c_info["id"], False)
+    is_absent = absent.get(c_info["id"], False)
+    is_masked = masks.get(c_info["id"], False)
+
+    pickup_time = d.final.depart_min + c_info["time_off"]
+    orig_pickup = d.route.depart_min + c_info["time_off"]
+
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Morning Pickup Time", fmt_hm(pickup_time) + " IST", f"Scheduled {fmt_hm(orig_pickup)}" if pickup_time != orig_pickup else "On Schedule")
+    c2.metric("Residential Stop PM2.5", f"{c_info['stop_pm']} µg/m³", "Hazardous Outdoor Air", delta_color="inverse")
+    c3.metric("Bus Cabin Filtration", "85% HEPA Purified", "Safe In-Cabin Air", delta_color="normal")
+    c4.metric("Commute Protection", f"{d.reduction_pct:.0f}% Exposure Cut", d.action)
+
+    st.markdown("### 📲 Guardian Commute Decision Suite")
+    g_col1, g_col2 = st.columns(2, gap="medium")
+
+    with g_col1:
+        st.markdown("<div class='decision-box'><h4>✅ Decision 1: Acknowledge & Confirm Pickup Readiness</h4>"
+                    "<p style='font-size:0.88rem;color:#a9c7bc'>Confirm to the school bus conductor that your child will be present at the residential stop at the adjusted pickup window.</p>", unsafe_allow_html=True)
+        if st.button("✅ Confirm Pickup Readiness for " + child_name, type="primary", key="ack_btn"):
+            acks[c_info["id"]] = fmt_hm(env.now_min)
+            st.session_state["parent_acks"] = acks
+            st.rerun()
+        if is_acked:
+            st.success(f"✅ **Confirmed by Guardian**: Acknowledged readiness at {is_acked} IST. Bus conductor terminal updated.")
+        else:
+            st.info("ℹ️ Please confirm pickup readiness so driver does not experience avoidable stop idling.")
+        st.markdown("</div>", unsafe_allow_html=True)
+
+        st.markdown("<div class='decision-box'><h4>😷 Decision 2: In-Cabin N95 Respirator Request</h4>"
+                    "<p style='font-size:0.88rem;color:#a9c7bc'>Request conductor issue a pediatric N95 respirator mask upon boarding the school bus.</p>", unsafe_allow_html=True)
+        m_lbl = "Cancel Mask Request" if is_masked else "Request In-Cabin N95 Mask from Conductor"
+        if st.button("😷 " + m_lbl, key="mask_btn"):
+            masks[c_info["id"]] = not is_masked
+            st.session_state["parent_mask_req"] = masks
+            st.rerun()
+        if is_masked:
+            st.success("✅ **Mask Request Active**: Conductor manifest flagged to issue sealed pediatric N95 mask to student upon boarding.")
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    with g_col2:
+        st.markdown("<div class='decision-box'><h4>🏠 Decision 3: Excused Smog Absence (Keep Child Home)</h4>"
+                    "<p style='font-size:0.88rem;color:#a9c7bc'>Opt out of today's commute due to severe smog conditions under the school's medical weather policy.</p>", unsafe_allow_html=True)
+        a_lbl = "Revoke Smog Leave (Child Attending)" if is_absent else "Request Excused Smog Absence for Today"
+        if st.button("🏠 " + a_lbl, key="abs_btn"):
+            absent[c_info["id"]] = not is_absent
+            st.session_state["parent_absent"] = absent
+            st.rerun()
+        if is_absent:
+            st.warning("⚠️ **Smog Absence Approved**: Marked as Excused Absence under Clean Air Policy. Bus conductor notified to bypass stop.")
+        st.markdown("</div>", unsafe_allow_html=True)
+
+        st.markdown("<div class='decision-box'><h4>📱 Decision 4: Re-Send Commute Alert SMS / Push</h4>"
+                    "<p style='font-size:0.88rem;color:#a9c7bc'>Trigger an immediate simulated SMS ping to registered mobile phone (+91-98101-XXXXX).</p>", unsafe_allow_html=True)
+        if st.button("📲 Send Instant SMS Alert to Registered Phone", key="sms_btn"):
+            st.session_state["parent_sms_sent"] = True
+            st.rerun()
+        if st.session_state.get("parent_sms_sent"):
+            st.success("📱 **SMS Delivered via Amazon SNS**: 'EcoRoute: Bus pickup for " + child_name + f" set for {fmt_hm(pickup_time)} IST. Route using low-exposure loop. Morning assembly indoors.'")
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    st.markdown("### 📱 Guardian Smartphone Commute Card")
+    alert = compose_alert(d.route, d, "", lang)
+    msg_body = alert["structure"]["sms"]
+    status_tags = ""
+    if is_acked:
+        status_tags += "<br><span style='color:#2ecc8c'>✓ Pickup Confirmed</span>"
+    if is_absent:
+        status_tags += "<br><span style='color:#ff4d4f'>⚠ Excused Absence Active</span>"
+    if is_masked:
+        status_tags += "<br><span style='color:#7de3f4'>😷 N95 Mask Requested</span>"
+
+    st.markdown(
+        f"<div class='parent-phone'>"
+        f"<div class='parent-head'><span>EcoRoute Sentinel Parent App</span><span>{fmt_hm(env.now_min)} IST</span></div>"
+        f"<div class='parent-bubble'><b>🚍 Route {d.route.id} Notice for {child_name}:</b><br>{html.escape(msg_body)}"
+        f"<br><br><b>Stop:</b> {c_info['stop']} | <b>Pickup:</b> {fmt_hm(pickup_time)} IST"
+        f"{status_tags}"
+        f"</div>"
+        f"<div class='parent-time'>Delivered via Amazon SNS Transactional SMS</div></div>",
+        unsafe_allow_html=True
+    )
+
+
+def view_regulator(decisions: list, env: Environment, threshold: float):
+    st.markdown(
+        "<div class='portal-scope-box'>"
+        "<h4>🏛️ City Environmental Regulator (CPCB / DPCC) Domain</h4>"
+        "<p><b>Exclusive Responsibilities:</b> Regional airshed surveillance, statutory freight corridor restrictions under GRAP Stage IV (Section 115 Motor Vehicles Act), and institutional Clean Commute ESG auditing.<br>"
+        "<i>Non-overlapping Boundary: Regulators do not manage school calendars, daily bus driver dispatch, or individual family attendance.</i></p>"
+        "</div>",
+        unsafe_allow_html=True
+    )
+
+    freight_div = st.session_state.get("regulator_freight_diversion", False)
+    certified = st.session_state.get("regulator_certified", False)
+    mitigated = [d for d in decisions if d.triggered and d.action not in ("ESCALATE", "NONE")]
+    avoided_mg = sum(d.route.students * (d.baseline.dose_ug - d.final.dose_ug) for d in mitigated) / 1000.0
+    avg_red = (sum(d.reduction_pct for d in mitigated) / len(mitigated)) if mitigated else 0.0
+
+    r1, r2, r3, r4 = st.columns(4)
+    r1.metric("Regional Airshed AQI", f"{env.aqi} AQI", "Severe Plume" if env.aqi > 300 else "Moderate", delta_color="inverse")
+    r2.metric("Stubble Plume Bearing", f"{env.wind_from}° NW", "Direct Delhi Corridor" if 290 <= env.wind_from <= 340 else "Diffused")
+    r3.metric("School Fleet PM2.5 Spared", f"{avoided_mg:.1f} mg", f"{avg_red:.0f}% Exposure Reduction")
+    r4.metric("Freight Restriction (GRAP-IV)", "Active (Diverted)" if freight_div else "Inactive")
+
+    st.markdown("### 🏛️ Statutory Regulatory Decision Suite")
+    reg_col1, reg_col2 = st.columns(2, gap="medium")
+
+    with reg_col1:
+        st.markdown("<div class='decision-box'><h4>🚨 Decision 1: GRAP Stage-IV Heavy Freight Diversion</h4>"
+                    "<p style='font-size:0.88rem;color:#a9c7bc'>Exercise statutory authority under Section 115 of the Motor Vehicles Act to restrict non-essential heavy commercial diesel trucks on NH-44 and NH-48 during morning school commute hours.</p>", unsafe_allow_html=True)
+        f_lbl = "Revoke Corridor Freight Restrictions" if freight_div else "Enact GRAP Stage-IV Corridor Freight Diversion (NH-44 / NH-48)"
+        if st.button("🚨 " + f_lbl, type="primary" if not freight_div else "secondary", key="freight_btn"):
+            st.session_state["regulator_freight_diversion"] = not freight_div
+            st.rerun()
+        if freight_div:
+            st.success("✅ **Statutory Traffic Diversion Active**: Diesel freight trucks diverted from NH-44/48 school corridors. Regional school route traffic congestion reduced by 18% in simulation.")
+        else:
+            st.info("ℹ️ Commercial freight running unrestricted on arterial corridors. Heavy diesel exhaust increases school bus exposure.")
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    with reg_col2:
+        st.markdown("<div class='decision-box'><h4>🏅 Decision 2: CPCB Tier-1 Clean Commute ESG Certification</h4>"
+                    "<p style='font-size:0.88rem;color:#a9c7bc'>Audit institutional transport exposure avoidance against India NAAQS standards and issue official clean mobility ESG accreditation.</p>", unsafe_allow_html=True)
+        if st.button("🏅 Audit Fleet & Issue CPCB Tier-1 Certificate", key="cert_btn"):
+            if avg_red >= 15.0 or avoided_mg >= 5.0:
+                st.session_state["regulator_certified"] = True
+                st.rerun()
+            else:
+                st.error("❌ Fleet exposure reduction is below the 15% compliance threshold for Tier-1 certification.")
+        if certified:
+            st.markdown(
+                f"<div class='cert-seal'>"
+                f"<h3>🏅 CPCB TIER-1 CLEAN COMMUTE CERTIFICATE</h3>"
+                f"<p style='color:#a9c7bc;margin:4px 0'><b>Certificate ID:</b> CPCB-DEL-2026-CC-8842<br>"
+                f"<b>Entity Certified:</b> Delhi NCR Affiliated School Fleet (6 Corridors / 1,675 Students)<br>"
+                f"<b>Cumulative PM2.5 Inhalation Spared:</b> {avoided_mg:.1f} mg | <b>Mean Exposure Cut:</b> {avg_red:.0f}%<br>"
+                f"<b>Statutory Verification:</b> Central Pollution Control Board Air Quality Surveillance Wing</p>"
+                f"</div>",
+                unsafe_allow_html=True
+            )
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    st.markdown("### 📥 Decision 3: Regional Airshed Exposure Audit Dataset")
+    audit_rows = []
+    for d in decisions:
+        audit_rows.append({
+            "Corridor ID": d.route.id,
+            "Corridor Name": d.route.name,
+            "District / Zone": d.route.area,
+            "Student Beneficiaries": d.route.students,
+            "Observed AQI": env.aqi,
+            "Baseline Hazard (%)": round(d.baseline.hazard, 1),
+            "Mitigated Hazard (%)": round(d.final.hazard, 1),
+            "Child Dose Baseline (µg)": round(d.baseline.dose_ug, 1),
+            "Child Dose Mitigated (µg)": round(d.final.dose_ug, 1),
+            "Net Inhalation Avoided (mg)": round(d.route.students * (d.baseline.dose_ug - d.final.dose_ug) / 1000.0, 2),
+            "Corridor Freight Diversion": "Enacted" if freight_div else "None",
+            "Action Strategy": plan_text(d)
+        })
+    audit_df = pd.DataFrame(audit_rows)
+    show_df(audit_df, hide_index=True)
+    st.download_button(
+        "📥 Export CPCB Regional Airshed Exposure Audit Dataset (CSV)",
+        data=audit_df.to_csv(index=False).encode("utf-8"),
+        file_name=f"cpcb_regional_airshed_audit_{datetime.now().strftime('%Y%m%d')}.csv",
+        mime="text/csv",
+        key="reg_csv_btn"
+    )
+
+
+# =====================================================================================
 # MAIN ENTRYPOINT
 # =====================================================================================
 
 def main():
     st.markdown(CSS, unsafe_allow_html=True)
-    env, threshold, max_delay, lang_pref = sidebar_controls()
+    portal_role, env, threshold, max_delay, lang_pref = sidebar_controls()
+
+    # Session state initialization for cross-stakeholder governance
+    st.session_state.setdefault("fleet_plan_locked", False)
+    st.session_state.setdefault("emergency_arterial_override", False)
+    st.session_state.setdefault("principal_bell_buffer_min", 0)
+    st.session_state.setdefault("principal_outdoor_suspended", False)
+    st.session_state.setdefault("principal_hybrid_exempt", False)
+    st.session_state.setdefault("parent_acks", {})
+    st.session_state.setdefault("parent_absent", {})
+    st.session_state.setdefault("parent_mask_req", {})
+    st.session_state.setdefault("regulator_freight_diversion", False)
+    st.session_state.setdefault("regulator_certified", False)
+
+    bell_buf = st.session_state["principal_bell_buffer_min"]
+    freight_div = st.session_state["regulator_freight_diversion"]
+    force_arterial = st.session_state["emergency_arterial_override"]
+
+    # Incorporate Principal's bell time shift and Regulator's freight diversion into fleet calculation
+    active_fleet = []
+    for r in FLEET:
+        new_bell = r.bell_time_min + bell_buf
+        new_cong = r.cong_bias * (0.82 if freight_div else 1.0)
+        active_fleet.append(replace(r, bell_time_min=new_bell, cong_bias=new_cong))
 
     t0 = time.perf_counter()
-    decisions = [optimise(r, env, threshold, max_delay) for r in FLEET]
+    decisions = [optimise(r, env, threshold, (0 if force_arterial else max_delay)) for r in active_fleet]
+    if force_arterial:
+        new_decisions = []
+        for d in decisions:
+            b = d.baseline
+            new_decisions.append(replace(d, final=b, action="NONE", reduction_pct=0.0,
+                                         dist_extra_km=0.0, fuel_extra_l=0.0, cost_extra_inr=0.0, co2_extra_kg=0.0))
+        decisions = new_decisions
     compute_ms = (time.perf_counter() - t0) * 1000.0
-    sig = json.dumps([env.__dict__, threshold, max_delay, lang_pref], sort_keys=True)
+    sig = json.dumps([env.__dict__, threshold, max_delay, lang_pref, bell_buf, freight_div, force_arterial], sort_keys=True)
 
     probe = probe_localstack()
     dot = "#2ecc8c" if probe["up"] else "#2bb6c9"
     status = "AWS LocalStack Live Connected" if probe["up"] else "AWS Architecture Sandbox (Emulated)"
+
+    role_short = portal_role.split(" ")[1] if len(portal_role.split(" ")) > 1 else portal_role
 
     st.markdown(
         "<div class='eco-banner'><div><h1>EcoRoute Sentinel</h1>"
@@ -1352,24 +1789,34 @@ def main():
         "Forecasts smoke, wind and congestion 3 hours ahead, dynamically rerouting buses before children inhale toxic PM2.5.</p></div>"
         "<div class='eco-pills'>"
         f"<span class='eco-pill'><span class='eco-dot' style='background:{dot}'></span><b>{status}</b></span>"
+        f"<span class='eco-pill'>Portal: <b>{html.escape(role_short)}</b></span>"
         f"<span class='eco-pill'>Feed: <b>{env.source}</b></span>"
         f"<span class='eco-pill'>Engine: <b>{fmt_hm(env.now_min)} IST</b></span>"
         "<span class='eco-pill'>Track 01: Air</span></div></div>", unsafe_allow_html=True)
 
-    tab1, tab2, tab3, tab4 = st.tabs([
-        "🗺️ Active Fleet Ops",
-        "🔬 Predictive AI Model Insights",
-        "📊 Validation & Sensitivity",
-        "🛡️ AWS Cloud Infrastructure Plumbing"
-    ])
-    with tab1:
-        tab_fleet(decisions, env, threshold, lang_pref)
-    with tab2:
-        tab_ai(decisions, env, threshold)
-    with tab3:
-        tab_validation(decisions, env)
-    with tab4:
-        tab_aws(decisions, env, threshold, max_delay, compute_ms, sig, lang_pref)
+    # Route based on authenticated portal role:
+    # Retains full 4-tab dashboard as the primary view for School Transport Coordinator
+    if portal_role == "🚎 School Transport Coordinator (Fleet Operations)":
+        tab1, tab2, tab3, tab4 = st.tabs([
+            "🗺️ Active Fleet Ops",
+            "🔬 Predictive AI Model Insights",
+            "📊 Validation & Sensitivity",
+            "🛡️ AWS Cloud Infrastructure Plumbing"
+        ])
+        with tab1:
+            tab_fleet(decisions, env, threshold, lang_pref)
+        with tab2:
+            tab_ai(decisions, env, threshold)
+        with tab3:
+            tab_validation(decisions, env)
+        with tab4:
+            tab_aws(decisions, env, threshold, max_delay, compute_ms, sig, lang_pref)
+    elif portal_role == "🎓 School Principal & Administration":
+        view_principal(decisions, env, threshold)
+    elif portal_role == "👨‍👩‍👧 Parent & Guardian Commute Portal":
+        view_parent(decisions, env, threshold, lang_pref)
+    elif portal_role == "🏛️ City Environmental Regulator (CPCB / DPCC)":
+        view_regulator(decisions, env, threshold)
 
 
 if __name__ == "__main__":
