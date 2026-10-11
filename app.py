@@ -906,14 +906,13 @@ CSS = """
 .parent-head{display:flex;justify-content:space-between;font-size:.8rem;opacity:.7;margin-bottom:12px}
 .parent-bubble{background:#233547;padding:14px;border-radius:14px;line-height:1.45;font-size:.92rem;border-left:4px solid #2ecc8c}
 .parent-time{font-size:.75rem;opacity:.6;margin-top:8px;text-align:right}
-.portal-scope-box{background:rgba(43,182,201,.08);border:1px solid rgba(43,182,201,.35);border-left:4px solid #2bb6c9;border-radius:12px;padding:14px 18px;margin-bottom:18px;font-family:'Figtree',system-ui,sans-serif}
-.portal-scope-box h4{margin:0 0 5px;color:#7de3f4;font-family:'Bricolage Grotesque',system-ui,sans-serif;font-size:1.05rem}
-.portal-scope-box p{margin:0;font-size:.90rem;line-height:1.45;color:#cfdee7}
-.decision-box{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.12);border-radius:14px;padding:16px 18px;margin-bottom:16px}
-.decision-box h4{margin:0 0 8px;font-family:'Bricolage Grotesque',system-ui,sans-serif;font-size:1.08rem;color:#f0f6fc}
-.cert-seal{border:2px dashed #2ecc8c;background:rgba(46,204,140,.06);border-radius:16px;padding:20px;text-align:center;margin:18px 0}
+.portal-scope-box{background:rgba(43,182,201,.10);border:1.5px solid rgba(43,182,201,.45);border-left:5px solid #2bb6c9;border-radius:12px;padding:16px 18px;margin-bottom:18px;font-family:'Figtree',system-ui,sans-serif;color:inherit}
+.portal-scope-box h4{margin:0 0 6px;color:inherit;font-family:'Bricolage Grotesque',system-ui,sans-serif;font-size:1.10rem;font-weight:700}
+.portal-scope-box p{margin:0;font-size:.92rem;line-height:1.5;color:inherit;opacity:.92}
+.cert-seal{border:2px dashed #2ecc8c;background:rgba(46,204,140,.08);border-radius:16px;padding:20px;text-align:center;margin:18px 0;color:inherit}
 .cert-seal h3{color:#2ecc8c;margin:0 0 6px;font-family:'Bricolage Grotesque',sans-serif}
-.coord-action-bar{background:rgba(15,48,41,.45);border:1px solid rgba(46,204,140,.3);border-radius:14px;padding:14px 18px;margin:8px 0 16px}
+.cert-seal p{margin:4px 0;color:inherit;opacity:.92}
+.coord-action-bar{background:rgba(15,48,41,.25);border:1px solid rgba(46,204,140,.4);border-radius:14px;padding:14px 18px;margin:8px 0 16px;color:inherit}
 </style>
 """
 
@@ -1443,50 +1442,51 @@ def view_principal(decisions: list, env: Environment, threshold: float):
     p_col1, p_col2 = st.columns(2, gap="medium")
 
     with p_col1:
-        st.markdown("<div class='decision-box'><h4>⏰ Decision 1: Morning Assembly Bell Time Shift</h4>"
-                    "<p style='font-size:0.88rem;color:#a9c7bc'>Adjust morning assembly time buffer to allow buses delayed by stubble smog to arrive without students missing classes or incurring tardiness penalties.</p>", unsafe_allow_html=True)
-        buf_options = [0, 15, 30]
-        cur_idx = buf_options.index(bell_buf) if bell_buf in buf_options else 0
-        new_buf = st.radio(
-            "Assembly Bell Delay Buffer (Minutes):",
-            buf_options,
-            index=cur_idx,
-            format_func=lambda x: "No Buffer (08:15 IST Bell)" if x == 0 else f"+{x} min Buffer ({fmt_hm(8*60+15+x)} IST Bell)",
-            horizontal=True,
-            key="p_bell_radio"
-        )
-        if st.button("💾 Apply Bell Adjustment to All Corridors", type="primary", key="p_bell_btn"):
-            st.session_state["principal_bell_buffer_min"] = new_buf
-            st.success(f"✅ Morning bell buffer adjusted to +{new_buf} min. Updated fleet arrival calculations across all 6 corridors.")
-            st.rerun()
-        if bell_buf > 0:
-            st.info(f"💡 **Tardiness Protection Active**: +{bell_buf} min bell shift currently protects incoming students on delayed routes ({ontime_count}/{len(decisions)} buses arriving on schedule).")
-        st.markdown("</div>", unsafe_allow_html=True)
+        with st.container(border=True):
+            st.markdown("#### ⏰ Decision 1: Morning Assembly Bell Time Shift")
+            st.markdown("Adjust morning assembly time buffer to allow buses delayed by stubble smog to arrive without students missing classes or incurring tardiness penalties.")
+            buf_options = [0, 15, 30]
+            cur_idx = buf_options.index(bell_buf) if bell_buf in buf_options else 0
+            new_buf = st.radio(
+                "Assembly Bell Delay Buffer (Minutes):",
+                buf_options,
+                index=cur_idx,
+                format_func=lambda x: "No Buffer (08:15 IST Bell)" if x == 0 else f"+{x} min Buffer ({fmt_hm(8*60+15+x)} IST Bell)",
+                horizontal=True,
+                key="p_bell_radio"
+            )
+            if st.button("💾 Apply Bell Adjustment to All Corridors", type="primary", key="p_bell_btn"):
+                st.session_state["principal_bell_buffer_min"] = new_buf
+                st.success(f"✅ Morning bell buffer adjusted to +{new_buf} min. Updated fleet arrival calculations across all 6 corridors.")
+                st.rerun()
+            if bell_buf > 0:
+                st.info(f"💡 **Tardiness Protection Active**: +{bell_buf} min bell shift currently protects incoming students on delayed routes ({ontime_count}/{len(decisions)} buses arriving on schedule).")
 
-        st.markdown("<div class='decision-box'><h4>🏫 Decision 2: High-Risk Respiratory Medical Leniency</h4>"
-                    "<p style='font-size:0.88rem;color:#a9c7bc'>Authorize remote hybrid classroom access for students with pediatric asthma or acute bronchitis during severe smoke inversion days.</p>", unsafe_allow_html=True)
-        h_btn_lbl = "Deactivate Remote Exemption" if hybrid_exempt else "Authorize Remote Hybrid Study (42 Asthmatic Students)"
-        if st.button("🛡️ " + h_btn_lbl, key="p_hybrid_btn"):
-            st.session_state["principal_hybrid_exempt"] = not hybrid_exempt
-            st.rerun()
-        if hybrid_exempt:
-            st.success("✅ **Medical Exemption Active**: 42 registered asthmatic students across Rohini, Gurugram, and Dwarka campuses excused from transit attendance without academic penalty.")
-        st.markdown("</div>", unsafe_allow_html=True)
+        with st.container(border=True):
+            st.markdown("#### 🏫 Decision 2: High-Risk Respiratory Medical Leniency")
+            st.markdown("Authorize remote hybrid classroom access for students with pediatric asthma or acute bronchitis during severe smoke inversion days.")
+            h_btn_lbl = "Deactivate Remote Exemption" if hybrid_exempt else "Authorize Remote Hybrid Study (42 Asthmatic Students)"
+            if st.button("🛡️ " + h_btn_lbl, key="p_hybrid_btn"):
+                st.session_state["principal_hybrid_exempt"] = not hybrid_exempt
+                st.rerun()
+            if hybrid_exempt:
+                st.success("✅ **Medical Exemption Active**: 42 registered asthmatic students across Rohini, Gurugram, and Dwarka campuses excused from transit attendance without academic penalty.")
 
     with p_col2:
-        st.markdown("<div class='decision-box'><h4>🚫 Decision 3: Campus Smog Directive (Assembly & Sports)</h4>"
-                    "<p style='font-size:0.88rem;color:#a9c7bc'>Mandate morning prayer and physical education activities move indoors into HEPA-filtered campus auditoriums.</p>", unsafe_allow_html=True)
-        o_btn_lbl = "Re-open Outdoor Grounds" if outdoor_susp else "Suspend Outdoor Assembly & Physical Sports"
-        if st.button("📢 " + o_btn_lbl, key="p_outdoor_btn"):
-            st.session_state["principal_outdoor_suspended"] = not outdoor_susp
-            st.rerun()
-        if outdoor_susp:
-            st.warning("⚠️ **Campus Directive Enacted**: All outdoor morning assemblies, sports drills, and recess activities suspended. Students confined to HEPA-purified indoor auditoriums.")
-        st.markdown("</div>", unsafe_allow_html=True)
+        with st.container(border=True):
+            st.markdown("#### 🚫 Decision 3: Campus Smog Directive (Assembly & Sports)")
+            st.markdown("Mandate morning prayer and physical education activities move indoors into HEPA-filtered campus auditoriums.")
+            o_btn_lbl = "Re-open Outdoor Grounds" if outdoor_susp else "Suspend Outdoor Assembly & Physical Sports"
+            if st.button("📢 " + o_btn_lbl, key="p_outdoor_btn"):
+                st.session_state["principal_outdoor_suspended"] = not outdoor_susp
+                st.rerun()
+            if outdoor_susp:
+                st.warning("⚠️ **Campus Directive Enacted**: All outdoor morning assemblies, sports drills, and recess activities suspended. Students confined to HEPA-purified indoor auditoriums.")
 
-        st.markdown("<div class='decision-box'><h4>📄 Decision 4: Official Principal Directive Notice</h4>"
-                    "<p style='font-size:0.88rem;color:#a9c7bc'>Generate and sign institutional health advisory for distribution to parents, teachers, and transport conductors.</p>", unsafe_allow_html=True)
-        directive_text = f"""OFFICIAL INSTITUTIONAL HEALTH DIRECTIVE
+        with st.container(border=True):
+            st.markdown("#### 📄 Decision 4: Official Principal Directive Notice")
+            st.markdown("Generate and sign institutional health advisory for distribution to parents, teachers, and transport conductors.")
+            directive_text = f"""OFFICIAL INSTITUTIONAL HEALTH DIRECTIVE
 DELHI NCR AFFILIATED SCHOOL CAMPUSES | OFFICE OF THE PRINCIPAL
 Date: {datetime.now().strftime('%d %B %Y')} | Time: {fmt_hm(env.now_min)} IST
 Airshed Severity: {env.aqi} AQI ({env.source})
@@ -1505,14 +1505,13 @@ Signed:
 Dr. S. Ramanathan, Principal & Dean
 Digital Verification Hash: {hashlib.sha256(f"{env.aqi}-{bell_buf}-{outdoor_susp}".encode()).hexdigest()[:16].upper()}
 """
-        st.download_button(
-            "📥 Export Signed Principal Directive (TXT)",
-            data=directive_text,
-            file_name=f"principal_smog_directive_{datetime.now().strftime('%Y%m%d')}.txt",
-            mime="text/plain",
-            key="p_download_btn"
-        )
-        st.markdown("</div>", unsafe_allow_html=True)
+            st.download_button(
+                "📥 Export Signed Principal Directive (TXT)",
+                data=directive_text,
+                file_name=f"principal_smog_directive_{datetime.now().strftime('%Y%m%d')}.txt",
+                mime="text/plain",
+                key="p_download_btn"
+            )
 
     st.markdown("### 📋 Morning Influx Roster & Corridor Bell Tracking")
     roster_rows = []
@@ -1579,49 +1578,49 @@ def view_parent(decisions: list, env: Environment, threshold: float, lang: str):
     g_col1, g_col2 = st.columns(2, gap="medium")
 
     with g_col1:
-        st.markdown("<div class='decision-box'><h4>✅ Decision 1: Acknowledge & Confirm Pickup Readiness</h4>"
-                    "<p style='font-size:0.88rem;color:#a9c7bc'>Confirm to the school bus conductor that your child will be present at the residential stop at the adjusted pickup window.</p>", unsafe_allow_html=True)
-        if st.button("✅ Confirm Pickup Readiness for " + child_name, type="primary", key="ack_btn"):
-            acks[c_info["id"]] = fmt_hm(env.now_min)
-            st.session_state["parent_acks"] = acks
-            st.rerun()
-        if is_acked:
-            st.success(f"✅ **Confirmed by Guardian**: Acknowledged readiness at {is_acked} IST. Bus conductor terminal updated.")
-        else:
-            st.info("ℹ️ Please confirm pickup readiness so driver does not experience avoidable stop idling.")
-        st.markdown("</div>", unsafe_allow_html=True)
+        with st.container(border=True):
+            st.markdown("#### ✅ Decision 1: Acknowledge & Confirm Pickup Readiness")
+            st.markdown("Confirm to the school bus conductor that your child will be present at the residential stop at the adjusted pickup window.")
+            if st.button("✅ Confirm Pickup Readiness for " + child_name, type="primary", key="ack_btn"):
+                acks[c_info["id"]] = fmt_hm(env.now_min)
+                st.session_state["parent_acks"] = acks
+                st.rerun()
+            if is_acked:
+                st.success(f"✅ **Confirmed by Guardian**: Acknowledged readiness at {is_acked} IST. Bus conductor terminal updated.")
+            else:
+                st.info("ℹ️ Please confirm pickup readiness so driver does not experience avoidable stop idling.")
 
-        st.markdown("<div class='decision-box'><h4>😷 Decision 2: In-Cabin N95 Respirator Request</h4>"
-                    "<p style='font-size:0.88rem;color:#a9c7bc'>Request conductor issue a pediatric N95 respirator mask upon boarding the school bus.</p>", unsafe_allow_html=True)
-        m_lbl = "Cancel Mask Request" if is_masked else "Request In-Cabin N95 Mask from Conductor"
-        if st.button("😷 " + m_lbl, key="mask_btn"):
-            masks[c_info["id"]] = not is_masked
-            st.session_state["parent_mask_req"] = masks
-            st.rerun()
-        if is_masked:
-            st.success("✅ **Mask Request Active**: Conductor manifest flagged to issue sealed pediatric N95 mask to student upon boarding.")
-        st.markdown("</div>", unsafe_allow_html=True)
+        with st.container(border=True):
+            st.markdown("#### 😷 Decision 2: In-Cabin N95 Respirator Request")
+            st.markdown("Request conductor issue a pediatric N95 respirator mask upon boarding the school bus.")
+            m_lbl = "Cancel Mask Request" if is_masked else "Request In-Cabin N95 Mask from Conductor"
+            if st.button("😷 " + m_lbl, key="mask_btn"):
+                masks[c_info["id"]] = not is_masked
+                st.session_state["parent_mask_req"] = masks
+                st.rerun()
+            if is_masked:
+                st.success("✅ **Mask Request Active**: Conductor manifest flagged to issue sealed pediatric N95 mask to student upon boarding.")
 
     with g_col2:
-        st.markdown("<div class='decision-box'><h4>🏠 Decision 3: Excused Smog Absence (Keep Child Home)</h4>"
-                    "<p style='font-size:0.88rem;color:#a9c7bc'>Opt out of today's commute due to severe smog conditions under the school's medical weather policy.</p>", unsafe_allow_html=True)
-        a_lbl = "Revoke Smog Leave (Child Attending)" if is_absent else "Request Excused Smog Absence for Today"
-        if st.button("🏠 " + a_lbl, key="abs_btn"):
-            absent[c_info["id"]] = not is_absent
-            st.session_state["parent_absent"] = absent
-            st.rerun()
-        if is_absent:
-            st.warning("⚠️ **Smog Absence Approved**: Marked as Excused Absence under Clean Air Policy. Bus conductor notified to bypass stop.")
-        st.markdown("</div>", unsafe_allow_html=True)
+        with st.container(border=True):
+            st.markdown("#### 🏠 Decision 3: Excused Smog Absence (Keep Child Home)")
+            st.markdown("Opt out of today's commute due to severe smog conditions under the school's medical weather policy.")
+            a_lbl = "Revoke Smog Leave (Child Attending)" if is_absent else "Request Excused Smog Absence for Today"
+            if st.button("🏠 " + a_lbl, key="abs_btn"):
+                absent[c_info["id"]] = not is_absent
+                st.session_state["parent_absent"] = absent
+                st.rerun()
+            if is_absent:
+                st.warning("⚠️ **Smog Absence Approved**: Marked as Excused Absence under Clean Air Policy. Bus conductor notified to bypass stop.")
 
-        st.markdown("<div class='decision-box'><h4>📱 Decision 4: Re-Send Commute Alert SMS / Push</h4>"
-                    "<p style='font-size:0.88rem;color:#a9c7bc'>Trigger an immediate simulated SMS ping to registered mobile phone (+91-98101-XXXXX).</p>", unsafe_allow_html=True)
-        if st.button("📲 Send Instant SMS Alert to Registered Phone", key="sms_btn"):
-            st.session_state["parent_sms_sent"] = True
-            st.rerun()
-        if st.session_state.get("parent_sms_sent"):
-            st.success("📱 **SMS Delivered via Amazon SNS**: 'EcoRoute: Bus pickup for " + child_name + f" set for {fmt_hm(pickup_time)} IST. Route using low-exposure loop. Morning assembly indoors.'")
-        st.markdown("</div>", unsafe_allow_html=True)
+        with st.container(border=True):
+            st.markdown("#### 📱 Decision 4: Re-Send Commute Alert SMS / Push")
+            st.markdown("Trigger an immediate simulated SMS ping to registered mobile phone (+91-98101-XXXXX).")
+            if st.button("📲 Send Instant SMS Alert to Registered Phone", key="sms_btn"):
+                st.session_state["parent_sms_sent"] = True
+                st.rerun()
+            if st.session_state.get("parent_sms_sent"):
+                st.success("📱 **SMS Delivered via Amazon SNS**: 'EcoRoute: Bus pickup for " + child_name + f" set for {fmt_hm(pickup_time)} IST. Route using low-exposure loop. Morning assembly indoors.'")
 
     st.markdown("### 📱 Guardian Smartphone Commute Card")
     alert = compose_alert(d.route, d, "", lang)
@@ -1672,39 +1671,39 @@ def view_regulator(decisions: list, env: Environment, threshold: float):
     reg_col1, reg_col2 = st.columns(2, gap="medium")
 
     with reg_col1:
-        st.markdown("<div class='decision-box'><h4>🚨 Decision 1: GRAP Stage-IV Heavy Freight Diversion</h4>"
-                    "<p style='font-size:0.88rem;color:#a9c7bc'>Exercise statutory authority under Section 115 of the Motor Vehicles Act to restrict non-essential heavy commercial diesel trucks on NH-44 and NH-48 during morning school commute hours.</p>", unsafe_allow_html=True)
-        f_lbl = "Revoke Corridor Freight Restrictions" if freight_div else "Enact GRAP Stage-IV Corridor Freight Diversion (NH-44 / NH-48)"
-        if st.button("🚨 " + f_lbl, type="primary" if not freight_div else "secondary", key="freight_btn"):
-            st.session_state["regulator_freight_diversion"] = not freight_div
-            st.rerun()
-        if freight_div:
-            st.success("✅ **Statutory Traffic Diversion Active**: Diesel freight trucks diverted from NH-44/48 school corridors. Regional school route traffic congestion reduced by 18% in simulation.")
-        else:
-            st.info("ℹ️ Commercial freight running unrestricted on arterial corridors. Heavy diesel exhaust increases school bus exposure.")
-        st.markdown("</div>", unsafe_allow_html=True)
+        with st.container(border=True):
+            st.markdown("#### 🚨 Decision 1: GRAP Stage-IV Heavy Freight Diversion")
+            st.markdown("Exercise statutory authority under Section 115 of the Motor Vehicles Act to restrict non-essential heavy commercial diesel trucks on NH-44 and NH-48 during morning school commute hours.")
+            f_lbl = "Revoke Corridor Freight Restrictions" if freight_div else "Enact GRAP Stage-IV Corridor Freight Diversion (NH-44 / NH-48)"
+            if st.button("🚨 " + f_lbl, type="primary" if not freight_div else "secondary", key="freight_btn"):
+                st.session_state["regulator_freight_diversion"] = not freight_div
+                st.rerun()
+            if freight_div:
+                st.success("✅ **Statutory Traffic Diversion Active**: Diesel freight trucks diverted from NH-44/48 school corridors. Regional school route traffic congestion reduced by 18% in simulation.")
+            else:
+                st.info("ℹ️ Commercial freight running unrestricted on arterial corridors. Heavy diesel exhaust increases school bus exposure.")
 
     with reg_col2:
-        st.markdown("<div class='decision-box'><h4>🏅 Decision 2: CPCB Tier-1 Clean Commute ESG Certification</h4>"
-                    "<p style='font-size:0.88rem;color:#a9c7bc'>Audit institutional transport exposure avoidance against India NAAQS standards and issue official clean mobility ESG accreditation.</p>", unsafe_allow_html=True)
-        if st.button("🏅 Audit Fleet & Issue CPCB Tier-1 Certificate", key="cert_btn"):
-            if avg_red >= 15.0 or avoided_mg >= 5.0:
-                st.session_state["regulator_certified"] = True
-                st.rerun()
-            else:
-                st.error("❌ Fleet exposure reduction is below the 15% compliance threshold for Tier-1 certification.")
-        if certified:
-            st.markdown(
-                f"<div class='cert-seal'>"
-                f"<h3>🏅 CPCB TIER-1 CLEAN COMMUTE CERTIFICATE</h3>"
-                f"<p style='color:#a9c7bc;margin:4px 0'><b>Certificate ID:</b> CPCB-DEL-2026-CC-8842<br>"
-                f"<b>Entity Certified:</b> Delhi NCR Affiliated School Fleet (6 Corridors / 1,675 Students)<br>"
-                f"<b>Cumulative PM2.5 Inhalation Spared:</b> {avoided_mg:.1f} mg | <b>Mean Exposure Cut:</b> {avg_red:.0f}%<br>"
-                f"<b>Statutory Verification:</b> Central Pollution Control Board Air Quality Surveillance Wing</p>"
-                f"</div>",
-                unsafe_allow_html=True
-            )
-        st.markdown("</div>", unsafe_allow_html=True)
+        with st.container(border=True):
+            st.markdown("#### 🏅 Decision 2: CPCB Tier-1 Clean Commute ESG Certification")
+            st.markdown("Audit institutional transport exposure avoidance against India NAAQS standards and issue official clean mobility ESG accreditation.")
+            if st.button("🏅 Audit Fleet & Issue CPCB Tier-1 Certificate", key="cert_btn"):
+                if avg_red >= 15.0 or avoided_mg >= 5.0:
+                    st.session_state["regulator_certified"] = True
+                    st.rerun()
+                else:
+                    st.error("❌ Fleet exposure reduction is below the 15% compliance threshold for Tier-1 certification.")
+            if certified:
+                st.markdown(
+                    f"<div class='cert-seal'>"
+                    f"<h3>🏅 CPCB TIER-1 CLEAN COMMUTE CERTIFICATE</h3>"
+                    f"<p><b>Certificate ID:</b> CPCB-DEL-2026-CC-8842<br>"
+                    f"<b>Entity Certified:</b> Delhi NCR Affiliated School Fleet (6 Corridors / 1,675 Students)<br>"
+                    f"<b>Cumulative PM2.5 Inhalation Spared:</b> {avoided_mg:.1f} mg | <b>Mean Exposure Cut:</b> {avg_red:.0f}%<br>"
+                    f"<b>Statutory Verification:</b> Central Pollution Control Board Air Quality Surveillance Wing</p>"
+                    f"</div>",
+                    unsafe_allow_html=True
+                )
 
     st.markdown("### 📥 Decision 3: Regional Airshed Exposure Audit Dataset")
     audit_rows = []
