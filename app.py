@@ -910,6 +910,18 @@ CSS = """
 """
 
 
+def heat_style(df: pd.DataFrame):
+    def paint(v):
+        try:
+            x = clamp(float(v) / 100.0)
+        except (TypeError, ValueError):
+            return ""
+        r, g, b = (46, 204, 140) if x < .45 else ((255, 176, 32) if x < .75 else (255, 77, 79))
+        return f"background-color: rgba({r},{g},{b},{0.18 + 0.35 * x:.2f}); font-weight:600"
+    sty = df.style
+    return (sty.map if hasattr(sty, "map") else sty.applymap)(paint).format("{:.0f}%")
+
+
 def show_df(df, **kwargs):
     try:
         st.dataframe(df, width="stretch", **kwargs)
@@ -1153,6 +1165,27 @@ def tab_ai(decisions: list, env: Environment, threshold: float):
             "Selected": "Chosen" if (e.variant == d.final.variant and e.delay_min == d.final.delay_min) else ""
         } for e in sorted(d.candidates, key=lambda e: e.dose_ug * (1 + 0.35 * e.delay_min / 60))]
         show_df(pd.DataFrame(rows), hide_index=True)
+    else:
+        st.info(f"Route {d.route.id} ({d.route.area}) baseline hazard ({d.baseline.hazard:.0f}%) is below the {threshold:.0f}% alert line. "
+                "Mitigation optimiser remains idle; bus runs on schedule. Select a plume-impacted corridor or change scenarios to inspect candidates.")
+
+    st.markdown("**Whole-Fleet Hazard by Dispatch Option & Hold Time**")
+    cols = {
+        "Base Road (+0m)": ("BASE", 0), "Base Road (+30m)": ("BASE", 30), "Base Road (+60m)": ("BASE", 60),
+        "Low-Exp Loop (+0m)": ("ALT", 0), "Low-Exp Loop (+30m)": ("ALT", 30), "Low-Exp Loop (+60m)": ("ALT", 60),
+    }
+    grid_rows = {}
+    for x in decisions:
+        grid_rows[f"{x.route.id} ({x.route.area})"] = {
+            k: evaluate(x.route, env, x.route.depart_min + dl, v, dl).hazard
+            for k, (v, dl) in cols.items()
+        }
+    grid_df = pd.DataFrame(grid_rows).T
+    try:
+        show_df(heat_style(grid_df))
+    except Exception:
+        show_df(grid_df.round(0))
+    st.caption("3-hour Student Exposure Hazard across dispatch hold scenarios. Green (<45%), Amber (45-75%), Red (>75%).")
 
 
 def tab_validation(decisions: list, env: Environment):
@@ -1284,7 +1317,16 @@ def tab_aws(decisions: list, env: Environment, threshold: float, max_delay: int,
                 "PM2.5 Avoided (mg)": item["pm25_avoided_mg"]["N"],
                 "Bell Breached": "Yes" if item["bell_breached"]["BOOL"] else "No",
             })
-        show_df(pd.DataFrame(ddb_rows), hide_index=True)
+        ddb_df = pd.DataFrame(ddb_rows)
+        show_df(ddb_df, hide_index=True)
+        csv_data = ddb_df.to_csv(index=False).encode("utf-8")
+        st.download_button(
+            label="📥 Export DynamoDB Dispatch Audit Log (CSV)",
+            data=csv_data,
+            file_name="ecoroute_dynamodb_dispatch_audit.csv",
+            mime="text/csv",
+            help="Download immutable compliance audit records containing exposure reductions and school bell status."
+        )
 
 
 # =====================================================================================
