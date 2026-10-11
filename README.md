@@ -3,6 +3,9 @@
 > **AWS Bharat Builds Tour: Environmental Hacks | Track 01: Air (School Safety / Pollution Exposure)**  
 > *"Most air-quality apps show a number. EcoRoute Sentinel changes the bus schedule before children are exposed, and reports exactly how much toxic PM2.5 inhalation it saved."*
 
+[![Live Streamlit App](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://priyankah-0767-ecoroute-sentinel.streamlit.app/)
+🔗 **Official Live Web Application:** [https://priyankah-0767-ecoroute-sentinel.streamlit.app/](https://priyankah-0767-ecoroute-sentinel.streamlit.app/)
+
 ---
 
 ## 🎯 The Core Idea in One Sentence
@@ -67,43 +70,6 @@ Calibrated against observed ground-truth CPCB monitoring stations during the **N
 
 - **Spearman Rank Correlation**: $\rho = 1.00$
 - **Pearson Linear Correlation**: $R = 0.984$
-
----
-
-## 🚀 Quickstart & One-Command Setup
-
-### 1. Run the Dashboard
-```bash
-# Clone & enter directory
-git clone https://github.com/PriyankaH-0767/EcoRoute-Sentinel.git
-cd EcoRoute-Sentinel
-
-# Setup virtual environment
-python -m venv .venv
-.venv\Scripts\activate       # Windows (or: source .venv/bin/activate on Linux/macOS)
-pip install -r requirements.txt
-
-# Run Streamlit
-streamlit run app.py
-```
-App opens at **`http://localhost:8501`**.
-
-### 2. Run Automated Unit Tests
-```bash
-python -m unittest tests/test_risk_engine.py
-```
-*(All 10 unit tests pass in <0.01s)*
-
-### 3. Optional: 1-Command Live LocalStack AWS Infrastructure
-To run against real containerized AWS services:
-```bash
-# Start LocalStack
-docker compose up -d
-
-# Bootstrap all 6 AWS services (SNS, Lambda, EventBridge, DynamoDB, SQS DLQ, S3)
-python bootstrap_localstack.py
-```
-In the Streamlit app, the badge switches to **✅ AWS LocalStack Live Connected**.
 
 ---
 
