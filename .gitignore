@@ -27,7 +27,8 @@ ENV/
 env/
 
 # Streamlit
-.streamlit/
+.streamlit/*
+!.streamlit/config.toml
 
 # OS / IDE
 .DS_Store
