@@ -1032,6 +1032,50 @@ def kpi_block(decisions: list):
     )
 
 
+# =====================================================================================
+# STUDENT PROFILES DATABASE (CROSS-PORTAL SYNCHRONIZATION)
+# =====================================================================================
+
+STUDENTS_DB = {
+    "Aarav Sharma": {
+        "id": "STU-01",
+        "parent": "Mrs. Sunita Sharma (+91-98101-44210)",
+        "grade": "Class 4-B",
+        "route_id": "R-01",
+        "stop": "Rohini Sector 14",
+        "time_off": 0,
+        "stop_pm": 340
+    },
+    "Diya Mehta": {
+        "id": "STU-02",
+        "parent": "Mr. Rajesh Mehta (+91-98102-55319)",
+        "grade": "Class 2-A",
+        "route_id": "R-03",
+        "stop": "Gurugram DLF Phase 3",
+        "time_off": 10,
+        "stop_pm": 410
+    },
+    "Kabir Verma": {
+        "id": "STU-03",
+        "parent": "Mrs. Priya Verma (+91-98103-66428)",
+        "grade": "Class 6-C",
+        "route_id": "R-02",
+        "stop": "Dwarka Sector 10",
+        "time_off": 5,
+        "stop_pm": 260
+    },
+    "Ananya Rao": {
+        "id": "STU-04",
+        "parent": "Dr. Arvind Rao (+91-98104-77537)",
+        "grade": "Class 8-A",
+        "route_id": "R-04",
+        "stop": "Noida Sector 62",
+        "time_off": 15,
+        "stop_pm": 180
+    },
+}
+
+
 def sidebar_controls() -> tuple[str, Environment, float, int, str]:
     st.sidebar.markdown("### 🔑 Stakeholder Portal Login")
     portal_role = st.sidebar.selectbox(
@@ -1051,7 +1095,29 @@ def sidebar_controls() -> tuple[str, Environment, float, int, str]:
     elif portal_role == "🎓 School Principal & Administration":
         st.sidebar.caption("🎓 **Role Authenticated**: Dr. S. Ramanathan, Principal & Dean (Delhi NCR Campuses). Authority over bell schedules, sports, and campus health.")
     elif portal_role == "👨‍👩‍👧 Parent & Guardian Commute Portal":
-        st.sidebar.caption("👨‍👩‍👧 **Role Authenticated**: Guardian Account (Student ID #DL-7492). Authority over child readiness, stop attendance & mask requests.")
+        st.session_state.setdefault("active_child", "Aarav Sharma")
+        cur_child = st.session_state["active_child"]
+        child_keys = list(STUDENTS_DB.keys())
+        cur_idx = child_keys.index(cur_child) if cur_child in child_keys else 0
+        st.sidebar.caption("👨‍👩‍👧 **Role Authenticated**: Registered Guardian Account.")
+        sel_child = st.sidebar.selectbox(
+            "Logged In Child Account:",
+            child_keys,
+            index=cur_idx,
+            format_func=lambda k: f"{k} ({STUDENTS_DB[k]['grade']})",
+            key="sb_child_select",
+            help="Your child's profile is automatically selected and pre-loaded upon login."
+        )
+        if sel_child != cur_child:
+            st.session_state["active_child"] = sel_child
+            st.rerun()
+        c_info = STUDENTS_DB[sel_child]
+        st.sidebar.info(
+            f"👤 **Guardian**: {c_info['parent']}\n\n"
+            f"🧒 **Child**: {sel_child} ({c_info['grade']})\n\n"
+            f"📍 **Stop**: {c_info['stop']}\n\n"
+            f"🚍 **Assigned Route**: Bus {c_info['route_id']}"
+        )
     else:
         st.sidebar.caption("🏛️ **Role Authenticated**: Senior Inspector, Central Pollution Control Board (CPCB). Statutory authority under Air Act & MV Act Section 115.")
 
@@ -1162,17 +1228,40 @@ High-Risk Leniency: {"Hybrid remote authorized for asthmatic students" if st.ses
             st.success("✅ **Medical Exemption Active**: 42 registered asthmatic students excused from physical transit.")
 
     elif "Parent" in portal_role:
+        st.session_state.setdefault("active_child", "Aarav Sharma")
+        cur_child = st.session_state["active_child"]
+        c_data = STUDENTS_DB[cur_child]
+        d = next((x for x in decisions if x.route.id == c_data["route_id"]), decisions[0])
+        pickup_time = d.final.depart_min + c_data["time_off"]
+        orig_pickup = d.route.depart_min + c_data["time_off"]
+
+        st.markdown(
+            f"<div class='portal-scope-box' style='margin-bottom:12px;background:linear-gradient(135deg, rgba(43,182,201,0.1), rgba(16,36,54,0.6));border-left:4px solid #2bb6c9;'>"
+            f"<h4>👨‍👩‍👧 Authenticated Guardian Commute Account: {c_data['parent']}</h4>"
+            f"<p><b>Active Student:</b> <span style='color:#2ecc8c;font-size:1.08em;'><b>{cur_child}</b></span> ({c_data['grade']}) | "
+            f"<b>Student ID:</b> #{c_data['id']} | <b>Assigned Bus:</b> Route {c_data['route_id']} | "
+            f"<b>Pickup Stop:</b> {c_data['stop']} | <b>Morning Pickup:</b> {fmt_hm(pickup_time)} IST "
+            f"({'On Schedule' if pickup_time == orig_pickup else f'Shifted from {fmt_hm(orig_pickup)}'})<br>"
+            f"<i>✓ Child details verified and automatically selected upon login. Switch student below if managing multiple children.</i></p>"
+            f"</div>",
+            unsafe_allow_html=True
+        )
+
         st.markdown("### 👨‍👩‍👧 Parent & Guardian Commute Action Bar")
-        students_quick = {
-            "Aarav Sharma": {"id": "STU-01", "grade": "Class 4-B", "route_id": "R-01", "stop": "Rohini Sector 14"},
-            "Diya Mehta": {"id": "STU-02", "grade": "Class 2-A", "route_id": "R-03", "stop": "Gurugram DLF Phase 3"},
-            "Kabir Verma": {"id": "STU-03", "grade": "Class 6-C", "route_id": "R-02", "stop": "Dwarka Sector 10"},
-            "Ananya Rao": {"id": "STU-04", "grade": "Class 8-A", "route_id": "R-04", "stop": "Noida Sector 62"},
-        }
         g_c1, g_c2, g_c3, g_c4 = st.columns(4)
         with g_c1:
-            sel_child = st.selectbox("Student Profile", list(students_quick.keys()), key="quick_g_child")
-            c_data = students_quick[sel_child]
+            child_keys = list(STUDENTS_DB.keys())
+            c_idx = child_keys.index(cur_child) if cur_child in child_keys else 0
+            sel_child = st.selectbox(
+                "Active Child Account:",
+                child_keys,
+                index=c_idx,
+                format_func=lambda k: f"{k} ({STUDENTS_DB[k]['grade']})",
+                key="quick_g_child"
+            )
+            if sel_child != cur_child:
+                st.session_state["active_child"] = sel_child
+                st.rerun()
         with g_c2:
             acks = st.session_state.setdefault("parent_acks", {})
             if st.button(f"✅ Confirm Pickup ({c_data['id']})", key="quick_g_ack_btn"):
@@ -1195,11 +1284,11 @@ High-Risk Leniency: {"Hybrid remote authorized for asthmatic students" if st.ses
                 st.rerun()
 
         if acks.get(c_data["id"]):
-            st.success(f"✅ Pickup Confirmed for {sel_child} at {acks[c_data['id']]} IST.")
+            st.success(f"✅ Pickup Confirmed for {cur_child} at {acks[c_data['id']]} IST.")
         if masks.get(c_data["id"]):
-            st.info(f"😷 Pediatric N95 respirator requested for {sel_child}.")
+            st.info(f"😷 Pediatric N95 respirator requested for {cur_child}.")
         if absent.get(c_data["id"]):
-            st.warning(f"⚠️ Excused smog absence recorded for {sel_child}. Bus conductor notified to bypass stop.")
+            st.warning(f"⚠️ Excused smog absence recorded for {cur_child}. Bus conductor notified to bypass stop.")
 
     elif "Regulator" in portal_role:
         st.markdown("### 🏛️ City Environmental Regulator Action Bar")
@@ -1658,20 +1747,43 @@ def view_parent(decisions: list, env: Environment, threshold: float, lang: str):
         unsafe_allow_html=True
     )
 
-    students_db = {
-        "Aarav Sharma": {"id": "STU-01", "grade": "Class 4-B", "route_id": "R-01", "stop": "Rohini Sector 14", "time_off": 0, "stop_pm": 340},
-        "Diya Mehta": {"id": "STU-02", "grade": "Class 2-A", "route_id": "R-03", "stop": "Gurugram DLF Phase 3", "time_off": 10, "stop_pm": 410},
-        "Kabir Verma": {"id": "STU-03", "grade": "Class 6-C", "route_id": "R-02", "stop": "Dwarka Sector 10", "time_off": 5, "stop_pm": 260},
-        "Ananya Rao": {"id": "STU-04", "grade": "Class 8-A", "route_id": "R-04", "stop": "Noida Sector 62", "time_off": 15, "stop_pm": 180},
-    }
+    st.session_state.setdefault("active_child", "Aarav Sharma")
+    cur_child = st.session_state["active_child"]
+    child_keys = list(STUDENTS_DB.keys())
+    c_idx = child_keys.index(cur_child) if cur_child in child_keys else 0
 
-    st.markdown("### 👧 Select Student Profile")
-    child_name = st.selectbox(
-        "Active Student Commute Profile:",
-        list(students_db.keys()),
-        format_func=lambda k: f"{k} ({students_db[k]['grade']}) — Route {students_db[k]['route_id']} ({students_db[k]['stop']})"
+    c_info = STUDENTS_DB[cur_child]
+    d = next((x for x in decisions if x.route.id == c_info["route_id"]), decisions[0])
+
+    pickup_time = d.final.depart_min + c_info["time_off"]
+    orig_pickup = d.route.depart_min + c_info["time_off"]
+
+    st.markdown(
+        f"<div class='portal-scope-box' style='background:linear-gradient(135deg, rgba(43,182,201,0.12), rgba(16,36,54,0.6));border-left:4px solid #2bb6c9;margin-bottom:14px;'>"
+        f"<h4>🧒 Authenticated Student Profile: <span style='color:#2ecc8c;'>{cur_child}</span> ({c_info['grade']})</h4>"
+        f"<p><b>Registered Guardian:</b> {c_info['parent']} | <b>Student ID:</b> #{c_info['id']}<br>"
+        f"<b>Assigned Vehicle:</b> Route {c_info['route_id']} | <b>Pickup Stop:</b> {c_info['stop']} | "
+        f"<b>Morning Pickup Window:</b> {fmt_hm(pickup_time)} IST "
+        f"({'On Schedule' if pickup_time == orig_pickup else f'Shifted from {fmt_hm(orig_pickup)}'})<br>"
+        f"<span style='color:#2ecc8c;font-weight:600;'>✓ Pre-selected and synchronized automatically upon parent portal login.</span></p>"
+        f"</div>",
+        unsafe_allow_html=True
     )
-    c_info = students_db[child_name]
+
+    col_sel, _ = st.columns([2, 1])
+    with col_sel:
+        child_name = st.selectbox(
+            "Active Student Commute Profile (Switch if managing multiple siblings):",
+            child_keys,
+            index=c_idx,
+            format_func=lambda k: f"{k} ({STUDENTS_DB[k]['grade']}) — Route {STUDENTS_DB[k]['route_id']} ({STUDENTS_DB[k]['stop']})",
+            key="view_parent_child_select"
+        )
+        if child_name != cur_child:
+            st.session_state["active_child"] = child_name
+            st.rerun()
+
+    c_info = STUDENTS_DB[child_name]
     d = next((x for x in decisions if x.route.id == c_info["route_id"]), decisions[0])
 
     acks = st.session_state.setdefault("parent_acks", {})
@@ -1979,6 +2091,7 @@ def main():
     st.session_state.setdefault("parent_mask_req", {})
     st.session_state.setdefault("regulator_freight_diversion", False)
     st.session_state.setdefault("regulator_certified", False)
+    st.session_state.setdefault("active_child", "Aarav Sharma")
 
     bell_buf = st.session_state["principal_bell_buffer_min"]
     freight_div = st.session_state["regulator_freight_diversion"]
@@ -2007,7 +2120,11 @@ def main():
     dot = "#2ecc8c" if probe["up"] else "#2bb6c9"
     status = "AWS LocalStack Connected" if probe["up"] else "AWS Architecture Showcase (Active)"
 
-    role_short = portal_role.split(" ")[1] if len(portal_role.split(" ")) > 1 else portal_role
+    if "Parent" in portal_role:
+        cur_child_name = st.session_state.get("active_child", "Aarav Sharma")
+        role_short = f"Parent ({cur_child_name.split(' ')[0]})"
+    else:
+        role_short = portal_role.split(" ")[1] if len(portal_role.split(" ")) > 1 else portal_role
 
     st.markdown(
         "<div class='eco-banner'><div><h1>EcoRoute Sentinel</h1>"
